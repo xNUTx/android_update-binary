@@ -1,0 +1,213 @@
+#!/sbin/sh
+########
+#
+# Shell scripted update-binary, basic functions by
+# Chainfire, modified for extended use by [NUT].
+#
+
+OUTFD=$2
+ZIP=$3
+
+# ui_print "Something you want to output"
+ui_print() {
+	echo -n -e "ui_print $1\n" > /proc/self/fd/$OUTFD
+	echo -n -e "ui_print\n" > /proc/self/fd/$OUTFD
+}
+
+# set_perm 0 0 0777 /path/to/folder
+# set_perm 0 0 06755 /path/to/file.ext
+set_perm() {
+	chown $1.$2 $4
+	chown $1:$2 $4
+	chmod $3 $4
+}
+
+# set_perm_recursive 0 0 0777 /path/to/folder
+# set_perm_recursive 0 0 06755 /path/to/file.ext
+set_perm_recursive() {
+	chown -R $1.$2 $4
+	chown -R $1:$2 $4
+	chmod -R $3 $4
+}
+
+# ch_con /path/to/file.ext
+ch_con() {
+	/system/bin/toolbox chcon u:object_r:system_file:s0 $1
+	chcon u:object_r:system_file:s0 $1
+}
+
+# package_extract_dir source /destination
+package_extract_dir() {
+	unzip $ZIP '$1/*' -d $2
+}
+
+# package_extract_file path/to/file.ext /target
+package_extract_file() {
+	unzip $ZIP $1 -d $2
+}
+
+# mount /system
+# mount system
+# mount ext4 /dev/block/platform/msm_sdcc.1/by-name/system /system
+mount() {
+	if [ "$2" = "" ]; then
+		MOUNTS=$(cat /proc/mounts | grep "$1" | wc -l)
+		if [ "$MOUNTS" != "0" ]; then
+			return 0
+		fi
+		/sbin/mount $1
+		if [ "$?" != "0" ]; then
+			DEVICE=$(grep -i "$1" /etc/*.fstab | awk -F' ' '{print $1}')
+			MOUNTPOINT=$(grep -i "$1" /etc/*.fstab | awk -F' ' '{print $2}')
+			FSTYPE=$(grep -i "$1" /etc/*.fstab | awk -F' ' '{print $3}')
+			OPTIONS=$(grep -i "$1" /etc/*.fstab | awk -F' ' '{print $4}')
+			/sbin/mount -t $FSTYPE -o $OPTIONS $DEVICE $MOUNTPOINT
+			if [ "$?" != "0" ]; then
+				DEVICE=$(find /dev/block/platform/msm_sdcc.1/by-name/ -iname "$1")
+				MOUNTPOINT=$1
+				FSTYPE=$(/sbin/busybox blkid ${DEVICE} | /sbin/busybox awk -F' ' '{ print $NF }' | /sbin/busybox awk -F'[\"=]' '{ print $3 }');
+				/sbin/mount -t $FSTYPE $DEVICE $MOUNTPOINT
+				if [ "$?" != "0" ]; then
+					ui_print "Mounting $1 failed!"
+					exit 1
+				fi
+			fi
+		fi
+	fi
+	if [ "$1" != "" -a "$2" != "" -a "$3" != ""]; then
+		MOUNTS=$(cat /proc/mounts | grep "$3" | wc -l)
+		if [ "$MOUNTS" != "0" ]; then
+			return 0
+		fi
+		/sbin/mount -t "$1" "$2" "$3"
+		if [ "$?" != "0" ]; then
+			ui_print "Mounting $1 failed!"
+			exit 1
+		fi
+	fi
+	return 0
+}
+
+unmount() {
+	/sbin/umount -l $1
+	return 0
+}
+
+format() {
+	if [ "$1" = "`basename $1`" ]; then
+		/sbin/make_ext4fs $(find /dev/block/platform/msm_sdcc.1/by-name/ -iname "$1")
+	else
+		/sbin/make_ext4fs $1
+	fi
+	if [ "$?" != "0" ]; then
+		ui_print "Format $1 failed!"
+		exit 1
+	fi
+	return 0
+}
+
+##################################
+#
+# HERE THE ACTUAL WORK STARTS!
+#
+###
+
+ui_print ""
+ui_print ""
+ui_print ""
+ui_print "==========================================="
+ui_print "|                                         |"
+ui_print "|   *** XZDualRecovery removal tool ***   |"
+ui_print "|                                         |"
+ui_print "|        Created by Shoey63 @ XDA         |"
+ui_print "|                                         |"
+ui_print "==========================================="
+ui_print ""
+
+mount /system
+mount /data
+mount /cache
+#/sbin/mount -t auto /dev/block/mmcblk1p1 /external_sd
+mount auto /dev/block/mmcblk1p1 /external_sd
+
+if [ -d "/external_sd/XZDualRecovery" ]; then
+    rm -rf /external_sd/XZDualRecovery
+fi
+
+if [ -d "/cache/XZDualRecovery" ]; then
+    rm -rf /cache/XZDualRecovery
+fi
+
+if [ -f "/system/app/NDRUtils.apk" ]; then
+    rm /system/app/NDRUtils.apk
+fi
+
+if [ -f "/data/app/com.camber.ndrutils-1.apk" ]; then
+    rm /data/app/com.camber.ndrutils-1.apk
+fi
+
+if [ -f "/system/bin/recovery.twrp.cpio.lzma" ]; then
+    rm /system/bin/recovery.twrp.cpio.lzma
+fi
+
+if [ -f "/system/bin/recovery.twrp.tar" ]; then
+    rm /system/bin/recovery.twrp.tar
+fi
+
+if [ -f "/system/bin/recovery.cwm.cpio.lzma" ]; then
+    rm /system/bin/recovery.cwm.cpio.lzma
+fi
+
+if [ -f "/system/bin/recovery.cwm.tar" ]; then
+    rm /system/bin/recovery.cwm.tar
+fi
+
+if [ -f "/system/bin/recovery.philz.cpio.lzma" ]; then
+    rm /system/bin/recovery.philz.cpio.lzma
+fi
+
+if [ -f "/system/bin/ramdisk.stock.cpio.lzma" ]; then
+    rm /system/bin/ramdisk.stock.cpio.lzma
+fi
+
+if [ -f "/system/bin/ramdisk.stock.tar" ]; then
+    rm /system/bin/ramdisk.stock.tar
+fi
+
+if [ -f "/system/bin/charger" ]; then
+    rm /system/bin/charger
+fi
+
+if [ -f "/system/bin/ric" ]; then
+    rm /system/bin/ric
+fi
+
+if [ -f "/system/bin/chargemon" -a -f "/system/bin/chargemon.stock" ]; then
+    rm /system/bin/chargemon
+    mv /system/bin/chargemon.stock /system/bin/chargemon
+fi
+
+if [ -f "/system/bin/mr" -a -f "/system/bin/mr.stock" ]; then
+    rm /system/bin/mr
+    mv /system/bin/mr.stock /system/bin/mr
+fi
+
+if [ -f "/system/bin/dualrecovery.sh" ]; then
+    rm /system/bin/dualrecovery.sh
+fi
+
+umount /system
+umount /data
+umount /cache
+umount /external_sd
+
+ui_print "FINISHED!"
+
+ui_print "==========================================="
+ui_print "|         You are back to stock ;)        |"
+ui_print "|    If you like this removal package,    |"
+ui_print "|            be sure to hit the           |"
+ui_print "|          >> Thanks << Button! :)        |"
+ui_print "==========================================="
+
+exit 0
